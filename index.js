@@ -8,27 +8,32 @@ const jwt = require('jsonwebtoken')
 
 const port = process.env.PORT || 8000
 
-// middleware
-const corsOptions = {
-  origin: ['http://localhost:5173', 'http://localhost:5174'],
-  credentials: true,
-  optionSuccessStatus: 200,
-}
-app.use(cors(corsOptions))
+/* =======================
+   MIDDLEWARE
+======================= */
+
+app.use(
+  cors({
+    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    credentials: true,
+  })
+)
 
 app.use(express.json())
 app.use(cookieParser())
 
-// Verify Token Middleware
-const verifyToken = async (req, res, next) => {
+/* =======================
+   VERIFY TOKEN MIDDLEWARE
+======================= */
+
+const verifyToken = (req, res, next) => {
   const token = req.cookies?.token
-  console.log(token)
   if (!token) {
     return res.status(401).send({ message: 'unauthorized access' })
   }
+
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
     if (err) {
-      console.log(err)
       return res.status(401).send({ message: 'unauthorized access' })
     }
     req.user = decoded
@@ -36,7 +41,12 @@ const verifyToken = async (req, res, next) => {
   })
 }
 
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.n6rvadf.mongodb.net/?appName=Cluster0`
+/* =======================
+   MONGODB CONNECTION
+======================= */
+
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.n6rvadf.mongodb.net/?retryWrites=true&w=majority`
+
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -47,73 +57,92 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    const roomcollection = client.db('homegoDB').collection('rooms')
-    // auth related api
+    const roomCollection = client.db('homegoDB').collection('rooms')
+
+    /* =======================
+       AUTH APIs
+    ======================= */
+
+    // Create JWT & set cookie
     app.post('/jwt', async (req, res) => {
       const user = req.body
+
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: '365d',
       })
+
       res
         .cookie('token', token, {
           httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+          secure: false,      // DEV MODE
+          sameSite: 'lax',    // DEV MODE
         })
         .send({ success: true })
     })
+
     // Logout
     app.get('/logout', async (req, res) => {
-      try {
-        res
-          .clearCookie('token', {
-            maxAge: 0,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-          })
-          .send({ success: true })
-        console.log('Logout successful')
-      } catch (err) {
-        res.status(500).send(err)
-      }
+      res
+        .clearCookie('token', {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'lax',
+        })
+        .send({ success: true })
+
+      console.log('Logout successful')
     })
 
-    // Get all rooms from db
+    /* =======================
+       ROOMS APIs
+    ======================= */
+
+    // Get all rooms (with category filter)
     app.get('/rooms', async (req, res) => {
-      const category = req.query.category;
-      let query = {};
+      const category = req.query.category
+      let query = {}
+
       if (category && category !== 'null') {
-        query.category = category;
+        query.category = category
       }
-      console.log(category);
-      
-      const result = await roomcollection.find(query).toArray()
+
+      const result = await roomCollection.find(query).toArray()
       res.send(result)
     })
 
-    // Get single room by id
+    // Get single room by ID
     app.get('/rooms/:id', async (req, res) => {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
-      const room = await roomcollection.findOne(query)
+      const room = await roomCollection.findOne(query)
       res.send(room)
     })
 
-    // Send a ping to confirm a successful connection
+    /* =======================
+       DB PING
+    ======================= */
+
     await client.db('admin').command({ ping: 1 })
-    console.log(
-      'Pinged your deployment. You successfully connected to MongoDB!'
-    )
-  } finally {
-    // Ensures that the client will close when you finish/error
+    console.log('Pinged MongoDB successfully!')
+  } catch (error) {
+    console.error(error)
   }
 }
+
 run().catch(console.dir)
 
+/* =======================
+   ROOT
+======================= */
+
 app.get('/', (req, res) => {
-  res.send('Hello from StayVista Server..')
+  res.send('Hello from StayVista Server')
 })
 
+/* =======================
+   START SERVER
+======================= */
+
 app.listen(port, () => {
-  console.log(`StayVista is running on port ${port}`)
+  console.log(`StayVista server running on port ${port}`)
 })
