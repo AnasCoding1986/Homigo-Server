@@ -97,6 +97,13 @@ async function run() {
        ROOMS APIs
     ======================= */
 
+    //Save a room data to DB
+    app.post('/rooms', async (req, res) => {
+      const room = req.body
+      const result = await roomCollection.insertOne(room)
+      res.send(result)
+    })
+
     // Get all rooms (with category filter)
     app.get('/rooms', async (req, res) => {
       const category = req.query.category
@@ -109,6 +116,15 @@ async function run() {
       const result = await roomCollection.find(query).toArray()
       res.send(result)
     })
+
+    //Get rooms by host email
+    app.get('/my-listings', async (req, res) => {
+  const email = req.query.email
+  const query = { 'host.email': email }
+  const rooms = await roomCollection.find(query).toArray()
+  res.send(rooms)
+})
+
 
     // Get single room by ID
     app.get('/rooms/:id', async (req, res) => {
