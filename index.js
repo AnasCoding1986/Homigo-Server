@@ -3,7 +3,7 @@ const app = express();
 require("dotenv").config();
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId, Timestamp } = require("mongodb");
 const jwt = require("jsonwebtoken");
 
 const port = process.env.PORT || 8000;
@@ -58,6 +58,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const roomCollection = client.db("homegoDB").collection("rooms");
+    const userCollection = client.db("homegoDB").collection("users");
 
     /* =======================
        AUTH APIs
@@ -91,6 +92,36 @@ async function run() {
         .send({ success: true });
 
       console.log("Logout successful");
+    });
+
+    /* =======================
+       Users APIs
+    ======================= */
+    // Save or update user data to DB
+    app.put("/user", async (req, res) => {
+      const user = req.body;
+      const filter = { email: user.email };
+      const isExists = await userCollection.findOne(filter);
+      if (isExists) return res.send({ message: "User already exists" });
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          ...user,
+          Timestamp: Date.now(),
+        },
+      };
+      const result = await userCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      res.send(result);
+    });
+
+    // Get all users
+    app.get("/users", async (req, res) => {
+      const users = await userCollection.find().toArray();
+      res.send(users);
     });
 
     /* =======================
