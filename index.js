@@ -3,7 +3,12 @@ const app = express();
 require("dotenv").config();
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const { MongoClient, ServerApiVersion, ObjectId, Timestamp } = require("mongodb");
+const {
+  MongoClient,
+  ServerApiVersion,
+  ObjectId,
+  Timestamp,
+} = require("mongodb");
 const jwt = require("jsonwebtoken");
 
 const port = process.env.PORT || 8000;
@@ -97,24 +102,26 @@ async function run() {
     /* =======================
        Users APIs
     ======================= */
-    // Save or update user data to DB
-    app.put("/user", async (req, res) => {
+    // Save user data to DB
+    app.post("/users", async (req, res) => {
       const user = req.body;
       const filter = { email: user.email };
-      const isExists = await userCollection.findOne(filter);
-      if (isExists) return res.send({ message: "User already exists" });
-      const options = { upsert: true };
-      const updateDoc = {
-        $set: {
-          ...user,
-          Timestamp: Date.now(),
-        },
+
+      // 1️⃣ Check if user already exists
+      const existingUser = await userCollection.findOne(filter);
+
+      if (existingUser) {
+        return res.send({ message: "User already exists" });
+      }
+
+      // 2️⃣ Create new user if not exists
+      const newUser = {
+        ...user,
+        createdAt: new Date(),
       };
-      const result = await userCollection.updateOne(
-        filter,
-        updateDoc,
-        options
-      );
+
+      const result = await userCollection.insertOne(newUser);
+
       res.send(result);
     });
 
@@ -123,6 +130,40 @@ async function run() {
       const users = await userCollection.find().toArray();
       res.send(users);
     });
+
+    // Update user
+    app.patch("/user/request-host", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).send({ message: "Email is required" });
+  }
+
+  const filter = { email };
+
+  // 1️⃣ Find existing user
+  const existingUser = await userCollection.findOne(filter);
+
+  if (!existingUser) {
+    return res.status(404).send({ message: "User not found" });
+  }
+
+  // 2️⃣ If already requested
+  if (existingUser.status === "Requested") {
+    return res.send({ alreadyRequested: true });
+  }
+
+  // 3️⃣ Update status → Requested
+  const result = await userCollection.updateOne(filter, {
+    $set: {
+      status: "Requested",
+      requestedAt: new Date(),
+    },
+  });
+
+  res.send(result);
+});
+
 
     /* =======================
        ROOMS APIs
